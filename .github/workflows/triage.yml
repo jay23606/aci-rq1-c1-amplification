@@ -1,0 +1,72 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened, reopened, labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: >-
+      github.event.action != 'labeled' ||
+      github.event.label.name == 'needs-triage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      action: ${{ steps.agent.outputs.action }}
+      batch: ${{ steps.agent.outputs.batch }}
+      count: ${{ steps.agent.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ensure triage labels
+        env:
+          GH_TOKEN: ${{ secrets.LAB_DEPLOY_TOKEN }}
+        run: |
+          gh label create needs-triage --color FBCA04 --description "Awaiting triage" 2>/dev/null || true
+          gh label create follow-up --color 1D76DB --description "Split from a larger report" 2>/dev/null || true
+
+      - name: Load issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue view "$ISSUE_NUMBER" --json number,title,body,author,labels > issue.json
+
+      - name: Plan triage
+        id: agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+        run: python scripts/triage_issue.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: triage-plan-${{ github.run_id }}
+          path: triage-plan.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  followups:
+    needs: plan
+    if: needs.plan.outputs.action == 'file_followups' && needs.plan.outputs.count != '0'
+    uses: ./.github/workflows/triage-followup.yml
+    with:
+      parent_issue: ${{ github.event.issue.number }}
+      count: ${{ needs.plan.outputs.count }}
+      batch: ${{ needs.plan.outputs.batch }}
+    secrets: inherit

@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a defect in tinytrace
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal code or command that shows the problem
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: tinytrace version
+      placeholder: 0.4.2
+    validations:
+      required: true

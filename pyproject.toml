@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinytrace"
+version = "0.4.2"
+description = "A dependency-free tracing shim for Python services and batch jobs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "tinytrace maintainers" }]
+keywords = ["tracing", "observability", "spans", "telemetry"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "ruff>=0.6"]
+
+[project.scripts]
+tinytrace = "tinytrace.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/xiangmaster/lab-c1-triage-scale"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

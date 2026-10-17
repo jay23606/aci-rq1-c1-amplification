@@ -1,0 +1,31 @@
+name: Release Notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version being prepared
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compose notes
+        run: |
+          {
+            echo "## tinytrace ${{ inputs.version }}"
+            echo
+            git log --pretty='- %s (%h)' "$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~20)"..HEAD
+          } > notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: notes.md

@@ -1,0 +1,46 @@
+name: Triage Follow-ups
+
+on:
+  workflow_call:
+    inputs:
+      parent_issue:
+        required: true
+        type: string
+      count:
+        required: true
+        type: string
+      batch:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  file:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: File follow-up issues
+        env:
+          GH_TOKEN: ${{ secrets.LAB_DEPLOY_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PARENT_ISSUE: ${{ inputs.parent_issue }}
+          COUNT: ${{ inputs.count }}
+          BATCH: ${{ inputs.batch }}
+        run: |
+          set -euo pipefail
+          max="${TT_MAX_FOLLOWUPS:-16}"
+          count="$COUNT"
+          if [ "$count" -gt "$max" ]; then count="$max"; fi
+          echo "$BATCH" | jq -c '.[0:16][]' | head -n "$count" | while read -r item; do
+            title=$(echo "$item" | jq -r '.title')
+            body=$(echo "$item" | jq -r '.body')
+            gh issue create \
+              --repo "$REPOSITORY" \
+              --title "[triage] $title" \
+              --body "$(printf '%s\n\nSplit from #%s by the triage assistant.' "$body" "$PARENT_ISSUE")" \
+              --label needs-triage,follow-up
+            sleep 2
+          done

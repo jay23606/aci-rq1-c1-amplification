@@ -1,0 +1,31 @@
+name: Label Sync
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-queue stale triage items
+        env:
+          GH_TOKEN: ${{ secrets.LAB_DEPLOY_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh issue list --repo "$REPOSITORY" --label needs-triage --state open \
+            --json number,updatedAt --limit 50 |
+            jq -r '.[] | select((now - (.updatedAt | fromdateiso8601)) > 3600) | .number' |
+            while read -r number; do
+              gh issue edit "$number" --repo "$REPOSITORY" --remove-label needs-triage
+              sleep 1
+              gh issue edit "$number" --repo "$REPOSITORY" --add-label needs-triage
+              sleep 1
+            done
