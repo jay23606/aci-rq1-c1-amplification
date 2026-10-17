@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 base_url = (os.environ.get("ANTHROPIC_BASE_URL") or "").rstrip("/")
@@ -74,8 +75,27 @@ def post_json(path: str, body: dict, headers: dict) -> dict:
         data=json.dumps(body).encode(),
         headers={"content-type": "application/json", **headers},
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return json.loads(response.read().decode())
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        text = error.read().decode("utf-8", errors="replace")
+        if (
+            path == "/v1/chat/completions"
+            and "max_tokens" in body
+            and "max_tokens" in text
+            and "max_completion_tokens" in text
+        ):
+            retry = dict(body)
+            retry["max_completion_tokens"] = retry.pop("max_tokens")
+            retry_request = urllib.request.Request(
+                f"{base_url}{path}",
+                data=json.dumps(retry).encode(),
+                headers={"content-type": "application/json", **headers},
+            )
+            with urllib.request.urlopen(retry_request, timeout=120) as response:
+                return json.loads(response.read().decode())
+        raise RuntimeError(f"model request failed: HTTP {error.code} {text}") from error
 
 
 if protocol == "openai":
