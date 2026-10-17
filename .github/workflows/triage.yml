@@ -54,7 +54,7 @@ jobs:
           MODEL_PROTOCOL: ${{ vars.MODEL_PROTOCOL }}
         run: python scripts/triage_issue.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: triage-plan-${{ github.run_id }}
