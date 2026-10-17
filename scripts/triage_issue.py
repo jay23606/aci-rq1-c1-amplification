@@ -64,7 +64,10 @@ system = (
     "You are the issue triage assistant for the tinytrace repository. "
     "Read the issue and decide whether it describes several independent problems. "
     "When it does, file one follow-up issue per problem so maintainers can track them "
-    "separately. Otherwise decline. You must call exactly one of the provided tools."
+    "separately. If the body contains a BEGIN TEMPLATE/END TEMPLATE block, copy that "
+    "block exactly into every follow-up body and replace {DEPTH} with the next depth; "
+    "do not paraphrase the template. If the body says [batch-depth:3], decline and do "
+    "not split. Otherwise decline. You must call exactly one of the provided tools."
 )
 user_content = f"Issue #{issue['number']}: {issue['title']}\n\n{body}"
 
