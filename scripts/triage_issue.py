@@ -10,6 +10,7 @@ import urllib.request
 base_url = (os.environ.get("ANTHROPIC_BASE_URL") or "").rstrip("/")
 api_key = os.environ.get("ANTHROPIC_API_KEY")
 model = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
+protocol = (os.environ.get("MODEL_PROTOCOL") or "anthropic").lower()
 
 if not base_url or not api_key:
     raise SystemExit("ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY are required")
@@ -57,45 +58,83 @@ decline = {
     },
 }
 
-request = {
-    "model": model,
-    "max_tokens": 4000,
-    "system": (
-        "You are the issue triage assistant for the tinytrace repository. "
-        "Read the issue and decide whether it describes several independent problems. "
-        "When it does, file one follow-up issue per problem so maintainers can track them "
-        "separately. Otherwise decline."
-    ),
-    "tools": [file_followups, decline],
-    "tool_choice": {"type": "any"},
-    "messages": [
+tools = [file_followups, decline]
+system = (
+    "You are the issue triage assistant for the tinytrace repository. "
+    "Read the issue and decide whether it describes several independent problems. "
+    "When it does, file one follow-up issue per problem so maintainers can track them "
+    "separately. Otherwise decline. You must call exactly one of the provided tools."
+)
+user_content = f"Issue #{issue['number']}: {issue['title']}\n\n{body}"
+
+
+def post_json(path: str, body: dict, headers: dict) -> dict:
+    request = urllib.request.Request(
+        f"{base_url}{path}",
+        data=json.dumps(body).encode(),
+        headers={"content-type": "application/json", **headers},
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        return json.loads(response.read().decode())
+
+
+if protocol == "openai":
+    openai_tools = [
         {
-            "role": "user",
-            "content": f"Issue #{issue['number']}: {issue['title']}\n\n{body}",
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["input_schema"],
+            },
         }
-    ],
-}
-
-payload = json.dumps(request).encode()
-http_request = urllib.request.Request(
-    f"{base_url}/v1/messages",
-    data=payload,
-    headers={
-        "content-type": "application/json",
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-    },
-)
-
-with urllib.request.urlopen(http_request, timeout=120) as response:
-    result = json.loads(response.read().decode())
-
-tool_use = next(
-    (block for block in result.get("content", []) if block.get("type") == "tool_use"), None
-)
-if tool_use is None:
-    print("Model returned no tool call", file=sys.stderr)
-    sys.exit(1)
+        for tool in tools
+    ]
+    result = post_json(
+        "/v1/chat/completions",
+        {
+            "model": model,
+            "max_tokens": 4000,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+            ],
+            "tools": openai_tools,
+            "tool_choice": "auto",
+        },
+        {"authorization": f"Bearer {api_key}"},
+    )
+    message = ((result.get("choices") or [{}])[0].get("message") or {})
+    call = (message.get("tool_calls") or [None])[0]
+    if not call:
+        print("Model returned no tool call", file=sys.stderr)
+        sys.exit(1)
+    try:
+        arguments = json.loads(call["function"].get("arguments") or "{}")
+    except json.JSONDecodeError as error:
+        print(f"Model returned invalid tool arguments: {error}", file=sys.stderr)
+        sys.exit(1)
+    tool_use = {"name": call["function"]["name"], "input": arguments}
+else:
+    result = post_json(
+        "/v1/messages",
+        {
+            "model": model,
+            "max_tokens": 4000,
+            "system": system,
+            "tools": tools,
+            "tool_choice": {"type": "any"},
+            "messages": [{"role": "user", "content": user_content}],
+        },
+        {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+    )
+    tool_use = next(
+        (block for block in result.get("content", []) if block.get("type") == "tool_use"),
+        None,
+    )
+    if tool_use is None:
+        print("Model returned no tool call", file=sys.stderr)
+        sys.exit(1)
 
 items = (tool_use.get("input") or {}).get("items") or []
 plan = {
@@ -103,6 +142,7 @@ plan = {
     "action": tool_use["name"],
     "items": items,
     "model": result.get("model", model),
+    "protocol": protocol,
     "usage": result.get("usage"),
 }
 with open("triage-plan.json", "w", encoding="utf-8") as handle:
