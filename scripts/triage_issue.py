@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -19,6 +20,8 @@ if not base_url or not api_key:
 with open("issue.json", encoding="utf-8") as handle:
     issue = json.load(handle)
 body = str(issue.get("body") or "")[:12000]
+depth_match = re.search(r"\[batch-depth:(\d+)\]", body)
+depth = int(depth_match.group(1)) if depth_match else 1
 
 file_followups = {
     "name": "file_followups",
@@ -166,6 +169,7 @@ plan = {
     "items": items,
     "model": result.get("model", model),
     "protocol": protocol,
+    "depth": depth,
     "usage": result.get("usage"),
 }
 with open("triage-plan.json", "w", encoding="utf-8") as handle:
@@ -176,4 +180,5 @@ if output:
     with open(output, "a", encoding="utf-8") as handle:
         handle.write(f"action={plan['action']}\n")
         handle.write(f"count={len(items)}\n")
+        handle.write(f"depth={depth}\n")
         handle.write(f"batch={json.dumps(items)}\n")

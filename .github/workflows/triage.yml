@@ -23,6 +23,7 @@ jobs:
       action: ${{ steps.agent.outputs.action }}
       batch: ${{ steps.agent.outputs.batch }}
       count: ${{ steps.agent.outputs.count }}
+      depth: ${{ steps.agent.outputs.depth }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,10 +65,14 @@ jobs:
 
   followups:
     needs: plan
-    if: needs.plan.outputs.action == 'file_followups' && needs.plan.outputs.count != '0'
+    if: >-
+      needs.plan.outputs.action == 'file_followups' &&
+      needs.plan.outputs.count != '0' &&
+      fromJSON(needs.plan.outputs.depth || '1') < 3
     uses: ./.github/workflows/triage-followup.yml
     with:
       parent_issue: ${{ github.event.issue.number }}
+      parent_depth: ${{ needs.plan.outputs.depth }}
       count: ${{ needs.plan.outputs.count }}
       batch: ${{ needs.plan.outputs.batch }}
     secrets: inherit

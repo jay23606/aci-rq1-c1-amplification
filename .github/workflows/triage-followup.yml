@@ -6,6 +6,9 @@ on:
       parent_issue:
         required: true
         type: string
+      parent_depth:
+        required: true
+        type: string
       count:
         required: true
         type: string
@@ -27,12 +30,14 @@ jobs:
           GH_TOKEN: ${{ secrets.LAB_DEPLOY_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PARENT_ISSUE: ${{ inputs.parent_issue }}
+          PARENT_DEPTH: ${{ inputs.parent_depth }}
           COUNT: ${{ inputs.count }}
           BATCH: ${{ inputs.batch }}
         run: |
           set -euo pipefail
           max="${TT_MAX_FOLLOWUPS:-16}"
           count="$COUNT"
+          depth=$((PARENT_DEPTH + 1))
           if [ "$count" -gt "$max" ]; then count="$max"; fi
           echo "$BATCH" | jq -c '.[0:16][]' | head -n "$count" | while read -r item; do
             title=$(echo "$item" | jq -r '.title')
@@ -40,7 +45,7 @@ jobs:
             gh issue create \
               --repo "$REPOSITORY" \
               --title "[triage] $title" \
-              --body "$(printf '%s\n\nSplit from #%s by the triage assistant.' "$body" "$PARENT_ISSUE")" \
+              --body "$(printf '[batch-depth:%s]\n%s\n\nSplit from #%s by the triage assistant.' "$depth" "$body" "$PARENT_ISSUE")" \
               --label needs-triage,follow-up
             sleep 2
           done
