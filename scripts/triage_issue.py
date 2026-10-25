@@ -74,6 +74,27 @@ system = (
 )
 user_content = f"Issue #{issue['number']}: {issue['title']}\n\n{body}"
 
+if depth >= 3:
+    plan = {
+        "source_issue": issue["number"],
+        "action": "decline_request",
+        "items": [],
+        "model": model,
+        "protocol": protocol,
+        "depth": depth,
+        "usage": None,
+    }
+    with open("triage-plan.json", "w", encoding="utf-8") as handle:
+        json.dump(plan, handle, indent=2)
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"action={plan['action']}\n")
+            handle.write("count=0\n")
+            handle.write(f"depth={depth}\n")
+            handle.write("batch=[]\n")
+    sys.exit(0)
+
 
 def post_json(path: str, body: dict, headers: dict) -> dict:
     request = urllib.request.Request(
